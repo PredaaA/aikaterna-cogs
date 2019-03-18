@@ -3,6 +3,7 @@
 		"aikaterna"
 	],
 	"description": "Check when the user was last active on a server. Originally made by Paddo.",
+        "hidden": true,
 	"short": "Check when the user was last active on a server.",
 	"tags": [
 		"seen", 
