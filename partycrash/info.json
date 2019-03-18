@@ -3,6 +3,7 @@
 		"aikaterna"
 	],
 	"description": "Posts invites to servers, if the bot is allowed to view them. Does not generate new invites.",
+    "hidden": true,
     "install_msg": "Thanks for installing, have fun.",
     "permissions" : [
 		"manage_guild"
