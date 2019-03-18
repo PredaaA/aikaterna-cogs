@@ -3,6 +3,7 @@
 		"aikaterna"
 	],
 	"description": "Removes all links in specified channels, with the ability to whitelist roles.",
+    "hidden": true,
     "install_msg": "Thanks for installing. Use `[p]nolinks` to get started.",
     "min_python_version": [3, 6, 0],
     "permissions" : [
