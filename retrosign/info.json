@@ -3,6 +3,7 @@
 		"aikaterna"
 	],
 	"description": "A port of Anismash's retrosign cog for v2: <https://github.com/Anismash/Ani-Cogs/tree/master/retrosign",
+    "hidden": true,
     "install_msg": "Thanks for installing, have fun.",
     "permissions" : [
 		"attach_files"
