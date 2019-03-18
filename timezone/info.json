@@ -4,6 +4,7 @@
         "fishyfing"
 	],
 	"description": "Check timezones, user times, or times in specific places. Originally made by Fishyfing.",
+        "hidden": true,
 	"short": "Check times for users and places.",
 	"tags": [
 		"time", 
