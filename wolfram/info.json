@@ -3,6 +3,7 @@
 		"aikaterna"
 	],
 	"description": "Query Wolfram|Alpha for answers. Requires a free API key. Originally by Paddo.",
+    "hidden": true,
     "install_msg": "Thanks for installing, have fun.",
 	"short": "Query Wolfram|Alpha for answers.",
 	"tags": [
