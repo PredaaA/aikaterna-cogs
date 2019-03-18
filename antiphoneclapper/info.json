@@ -3,6 +3,7 @@
 		"sitryk", "aikaterna"
 	],
 	"description": "Deletes messages with malformed GIFs.",
+    "hidden": true,
     "install_msg": "Thanks for installing, have fun.",
     "permissions" : [
 		"manage_messages"
