@@ -108,9 +108,9 @@ class Otherbot(commands.Cog):
         else:
             if pred.result is True:
                 await self.config.guild(ctx.guild).watching.clear()
-                await msg.edit("Successfully cleared watched bots.")
+                await msg.edit(content="Successfully cleared watched bots.")
             else:
-                await msg.edit("Clear cancelled.")
+                await msg.edit(content="Clear cancelled.")
 
     @watching.command()
     @checks.admin_or_permissions(manage_roles=True)
