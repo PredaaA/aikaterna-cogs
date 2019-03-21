@@ -104,7 +104,7 @@ class Otherbot(commands.Cog):
         try:
             await self.bot.wait_for("message", check=pred, timeout=10)
         except asyncio.TimeoutError:
-            return await ctx.send("Response timed out.")
+            return await msg.edit(content="Response timed out.")
         else:
             if pred.result is True:
                 await self.config.guild(ctx.guild).watching.clear()
