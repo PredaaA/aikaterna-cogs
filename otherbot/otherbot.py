@@ -1,6 +1,7 @@
 import discord
 
 from redbot.core import commands, checks, Config
+from redbot.core.utils.predicates import MessagePredicate
 
 from typing import Optional
 
@@ -95,8 +96,19 @@ class Otherbot(commands.Cog):
     @checks.admin_or_permissions(manage_roles=True)
     async def clear(self, ctx):
         """Clear existing bots watching."""
-        await self.config.guild(ctx.guild).watching.clear()
-        return await ctx.send("Successfully cleared watched bots.")
+        await ctx.send("Are you sure to clear all watched bots ?")
+        
+        pred = MessagePredicate.yes_or_no(ctx)
+        try:
+            await self.bot.wait_for("message", check=pred, timeout=10)
+        except asyncio.TimeoutError:
+            return await ctx.send("Response timed out.")
+        else:
+            if pred.result is True:
+                await self.config.guild(ctx.guild).watching.clear()
+                return await ctx.send("Successfully cleared watched bots.")
+            else:
+                return await ctx.send("Clear cancelled.")
 
     @watching.command()
     @checks.admin_or_permissions(manage_roles=True)
