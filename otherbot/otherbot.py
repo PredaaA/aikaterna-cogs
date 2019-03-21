@@ -98,7 +98,7 @@ class Otherbot(commands.Cog):
     @checks.admin_or_permissions(manage_roles=True)
     async def clear(self, ctx):
         """Clear existing bots watching."""
-        await ctx.send("Are you sure to clear all watched bots ?")
+        msg = await ctx.send("Are you sure to clear all watched bots ?")
         
         pred = MessagePredicate.yes_or_no(ctx)
         try:
@@ -108,9 +108,9 @@ class Otherbot(commands.Cog):
         else:
             if pred.result is True:
                 await self.config.guild(ctx.guild).watching.clear()
-                return await ctx.send("Successfully cleared watched bots.")
+                return await msg.edit("Successfully cleared watched bots.")
             else:
-                return await ctx.send("Clear cancelled.")
+                return await msg.edit("Clear cancelled.")
 
     @watching.command()
     @checks.admin_or_permissions(manage_roles=True)
