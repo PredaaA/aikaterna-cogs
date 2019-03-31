@@ -5,6 +5,7 @@ import asyncio
 from redbot.core import commands, checks, Config
 from redbot.core.utils.predicates import MessagePredicate
 
+from datetime import datetime
 from typing import Optional
 
 default_guild = {
@@ -138,10 +139,20 @@ class Otherbot(commands.Cog):
         if after.status == discord.Status.offline and (after.id in data["watching"]):
             await self.config.guild(after.guild).sent_online.set(False)
             if not data["ping"]:
-                await channel_object.send(f"{after.mention} is offline. \N{LARGE RED CIRCLE}")
+                await channel_object.send(
+                    embed=discord.Embed(
+                        color=0x8b0000,
+                        description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
+                        timestamp=datetime.utcnow()
+                    )
+                )
             else:
                 await channel_object.send(
-                    f'<@&{data["ping"]}>, {after.mention} is offline. \N{LARGE RED CIRCLE}'
+                    embed=discord.Embed(
+                        color=0x8b0000,
+                        description=f'<@&{data["ping"]}>, {after.mention} is offline. \N{LARGE RED CIRCLE}',
+                        timestamp=datetime.utcnow()
+                    )
                 )
         elif (
             data["online_notify"]
@@ -152,11 +163,19 @@ class Otherbot(commands.Cog):
             if not data["sent_online"]:
                 if not data["ping"]:
                     await channel_object.send(
-                        f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}"
+                        embed=discord.Embed(
+                            color=0x008800,
+                            description=f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}",
+                            timestamp=datetime.utcnow()
+                        )
                     )
                 else:
                     await channel_object.send(
-                        f'<@&{data["ping"]}>, {after.mention} is back online. \N{WHITE HEAVY CHECK MARK}'
+                        embed=discord.Embed(
+                            color=0x008800,
+                            description=f'<@&{data["ping"]}>, {after.mention} is back online. \N{WHITE HEAVY CHECK MARK}',
+                            timestamp=datetime.utcnow()
+                        )
                     )
             else:
                 pass
