@@ -138,46 +138,30 @@ class Otherbot(commands.Cog):
         channel_object = self.bot.get_channel(data["reporting"])
         if after.status == discord.Status.offline and (after.id in data["watching"]):
             await self.config.guild(after.guild).sent_online.set(False)
+            em = discord.Embed(
+                    color=0x8b0000,
+                    description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
+                    timestamp=datetime.utcnow()
+            )
             if not data["ping"]:
-                await channel_object.send(
-                    embed=discord.Embed(
-                        color=0x8b0000,
-                        description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
-                        timestamp=datetime.utcnow()
-                    )
-                )
+                await channel_object.send(embed=em)
             else:
-                await channel_object.send(
-                    embed=discord.Embed(
-                        color=0x8b0000,
-                        description=f'<@&{data["ping"]}>, {after.mention} is offline. \N{LARGE RED CIRCLE}',
-                        timestamp=datetime.utcnow()
-                    )
-                )
+                await channel_object.send("<@&{}>".format(data["ping"]), embed=em)
         elif (
             data["online_notify"]
             and after.status == discord.Status.online
             and (after.id in data["watching"])
         ):
             await self.config.guild(after.guild).sent_online.set(True)
+            em = discord.Embed(
+                    color=0x008800,
+                    description=f'{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}',
+                    timestamp=datetime.utcnow()
+            )
             if not data["sent_online"]:
                 if not data["ping"]:
-                    await channel_object.send(
-                        embed=discord.Embed(
-                            color=0x008800,
-                            description=f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}",
-                            timestamp=datetime.utcnow()
-                        )
-                    )
+                    await channel_object.send(embed=em)
                 else:
-                    await channel_object.send(
-                        embed=discord.Embed(
-                            color=0x008800,
-                            description=f'<@&{data["ping"]}>, {after.mention} is back online. \N{WHITE HEAVY CHECK MARK}',
-                            timestamp=datetime.utcnow()
-                        )
-                    )
-            else:
-                pass
+                    await channel_object.send("<@&{}>".format(data["ping"]), embed=em)
         else:
             pass
