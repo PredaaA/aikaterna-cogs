@@ -133,6 +133,7 @@ class Otherbot(commands.Cog):
         msg += "```"
         return await ctx.send(msg)
 
+    @commands.Cog.listener()
     async def on_member_update(self, before, after):
         data = await self.config.guild(after.guild).all()
         channel_object = self.bot.get_channel(data["reporting"])
