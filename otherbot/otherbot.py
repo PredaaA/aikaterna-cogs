@@ -7,12 +7,17 @@ from datetime import datetime
 
 class Otherbot(commands.Cog):
     __author__ = ["aikaterna", "Predä"]
+    __version__ = "0.5"
 
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, 2730321001, force_registration=True)
         self.config.register_guild(
-            ping=None, reporting=None, watching=[], online_watching=[],
+            ping=None,
+            reporting=None,
+            watching=[],
+            online_watching=[],
+            online_notification_sent=False,
         )
         self.convert_data = bot.loop.create_task(self.data_convert())
 
@@ -29,6 +34,8 @@ class Otherbot(commands.Cog):
                     continue
                 if k == "online_notify" and v is True:
                     await self.config.guild(guild).online_watching.set(raw_data["watching"])
+                    for to_del in ["online_notify", "sent_online"]:
+                        raw_data.pop(to_del)
 
     @commands.group()
     @commands.guild_only()
@@ -278,7 +285,15 @@ class Otherbot(commands.Cog):
                 await channel.send(embed=em)
             else:
                 await channel.send("<@&{}>".format(data["ping"]), embed=em)
-        elif after.status != discord.Status.offline and (after.id in data["online_watching"]):
+            if data["online_notification_sent"]:
+                await self.config.guild(after.guild).online_notification_sent.set(False)
+        elif after.status == discord.Status.offline and data["online_notification_sent"]:
+            await self.config.guild(after.guild).online_notification_sent.set(False)
+        elif (
+            after.status != discord.Status.offline
+            and (after.id in data["online_watching"])
+            and not data["online_notification_sent"]
+        ):
             em = discord.Embed(
                 color=0x008800,
                 description=f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}",
@@ -288,5 +303,6 @@ class Otherbot(commands.Cog):
                 await channel.send(embed=em)
             else:
                 await channel.send("<@&{}>".format(data["ping"]), embed=em)
+            await self.config.guild(after.guild).online_notification_sent.set(True)
         else:
             return
