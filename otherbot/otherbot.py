@@ -1,38 +1,148 @@
 import discord
 
-import asyncio
-
 from redbot.core import commands, checks, Config
-from redbot.core.utils.predicates import MessagePredicate
 
 from datetime import datetime
-from typing import Optional
-
-default_guild = {
-    "ping": None,
-    "reporting": None,
-    "watching": [],
-    "online_notify": False,
-    "sent_online": False,
-}
 
 
 class Otherbot(commands.Cog):
+    __author__ = ["aikaterna", "Predä"]
+
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, 2730321001, force_registration=True)
-        self.config.register_guild(**default_guild)
+        self.config.register_guild(
+            ping=None, reporting=None, watching=[], online_watching=[],
+        )
+        self.convert_data = bot.loop.create_task(self.data_convert())
+
+    def cog_unload(self):
+        if self.convert_data:
+            self.convert_data.cancel()
+
+    async def data_convert(self):
+        await self.bot.wait_until_ready()
+        for guild in self.bot.guilds:
+            raw_data = await self.config.guild(guild).all()
+            for k, v in raw_data.items():
+                if k == "watching" and not v:
+                    continue
+                if k == "online_notify" and v is True:
+                    await self.config.guild(guild).online_watching.set(raw_data["watching"])
 
     @commands.group()
     @commands.guild_only()
     @checks.admin_or_permissions(manage_roles=True)
-    async def otherbot(self, ctx):
+    async def otherbot(self, ctx: commands.Context):
         """Otherbot configuration options."""
-        pass
+        # Following logic from Trusty's welcome cog:
+        # https://github.com/TrustyJAID/Trusty-cogs/blob/master/welcome/welcome.py#L81
+        guild = ctx.guild
+        if not ctx.invoked_subcommand:
+            guild_data = await self.config.guild(guild).all()
+            settings_name = dict(
+                ping="Ping role",
+                reporting="Channel reporting",
+                watching="Offline tracking",
+                online_watching="Online tracking",
+            )
+            msg = ""
+            if ctx.channel.permissions_for(ctx.me).embed_links:
+                em = discord.Embed(
+                    color=await ctx.embed_colour(), title=f"Otherbot settings for {guild.name}"
+                )
+                for attr, name in settings_name.items():
+                    if attr == "ping":
+                        role = guild.get_role(guild_data["ping"])
+                        if role:
+                            msg += f"**{name}**: {role.mention}\n"
+                        else:
+                            msg += f"**{name}**: Not set.\n"
+                    elif attr == "reporting":
+                        channel = guild.get_channel(guild_data["reporting"])
+                        if channel:
+                            msg += f"**{name}**: {channel.mention}\n"
+                        else:
+                            msg += f"**{name}**: Not set.\n"
+                    elif attr == "watching":
+                        if guild_data["watching"]:
+                            msg += (
+                                f"**{name}**: "
+                                + " ".join(
+                                    [
+                                        self.bot.get_user(bots).mention
+                                        for bots in guild_data["watching"]
+                                    ]
+                                )
+                                + "\n"
+                            )
+                        else:
+                            msg += f"**{name}**: Not set.\n"
+                    elif attr == "online_watching":
+                        if guild_data["online_watching"]:
+                            msg += (
+                                f"**{name}**: "
+                                + " ".join(
+                                    [
+                                        self.bot.get_user(bots).mention
+                                        for bots in guild_data["online_watching"]
+                                    ]
+                                )
+                                + "\n"
+                            )
+                        else:
+                            msg += f"**{name}**: Not set.\n"
+                em.description = msg
+                em.set_thumbnail(url=guild.icon_url)
+                await ctx.send(embed=em)
+            else:
+                msg = "```\n"
+                for attr, name in settings_name.items():
+                    if attr == "ping":
+                        role = guild.get_role(guild_data["ping"])
+                        if role:
+                            msg += f"{name}: {role.mention}\n"
+                        else:
+                            msg += f"{name}: Not set.\n"
+                    elif attr == "reporting":
+                        channel = guild.get_channel(guild_data["reporting"])
+                        if channel:
+                            msg += f"{name}: {channel.mention}\n"
+                        else:
+                            msg += f"{name}: Not set.\n"
+                    elif attr == "watching":
+                        if guild_data["watching"]:
+                            msg += (
+                                f"{name}: "
+                                + ", ".join(
+                                    [
+                                        self.bot.get_user(bots).mention
+                                        for bots in guild_data["watching"]
+                                    ]
+                                )
+                                + "\n"
+                            )
+                        else:
+                            msg += f"{name}: Not set."
+                    elif attr == "online_watching":
+                        if guild_data["online_watching"]:
+                            msg += (
+                                f"{name}: "
+                                + " ".join(
+                                    [
+                                        self.bot.get_user(bots).mention
+                                        for bots in guild_data["online_watching"]
+                                    ]
+                                )
+                                + "\n"
+                            )
+                        else:
+                            msg += f"{name}: Not set.\n"
+                msg += "```"
+                await ctx.send(msg)
 
     @otherbot.command()
-    @checks.admin_or_permissions(manage_roles=True)
-    async def channel(self, ctx, channel: discord.TextChannel = None):
+    async def channel(self, ctx: commands.Context, channel: discord.TextChannel = None):
         """
         Sets the channel to report in.
         
@@ -44,8 +154,7 @@ class Otherbot(commands.Cog):
         await ctx.send(f"Reporting channel set to: {channel.mention}.")
 
     @otherbot.command()
-    @checks.admin_or_permissions(manage_roles=True)
-    async def pingrole(self, ctx, role_name: discord.Role = None):
+    async def pingrole(self, ctx: commands.Context, role_name: discord.Role = None):
         """Sets the role to use for pinging. Leave blank to reset it."""
         if not role_name:
             await self.config.guild(ctx.guild).ping.set(None)
@@ -53,124 +162,131 @@ class Otherbot(commands.Cog):
         await self.config.guild(ctx.guild).ping.set(role_name.id)
         pingrole_id = await self.config.guild(ctx.guild).ping()
         pingrole_obj = discord.utils.get(ctx.guild.roles, id=pingrole_id)
-        await ctx.send(f"Ping role set to: {pingrole_obj.name}.")
+        await ctx.send(f"Ping role set to: `{pingrole_obj.name}`.")
 
-    @otherbot.group()
-    @checks.admin_or_permissions(manage_roles=True)
-    async def watching(self, ctx):
-        """Watching commands."""
+    @otherbot.group(name="watch", aliases=["watching"])
+    async def otherbot_watch(self, ctx: commands.Context):
+        """Watch settings."""
         pass
 
-    @watching.command()
-    @checks.admin_or_permissions(manage_roles=True)  # TODO : Check if a bot is already stored, then delete it or sent msg to say it already stored
-    async def add(self, ctx, online: Optional[bool] = False, bot_user: discord.Member = None):
-        """
-        Add a bot to watch when it goes offline.
+    @otherbot_watch.group(name="offline")
+    async def otherbot_watch_offline(self, ctx: commands.Context):
+        """Manage offline notifications."""
+        pass
 
-        <online> : Set `True` if you want alerts when bot is back online. Default to False.
-        You can change it later by using [p]otherbot watching online command.
-        Note : Online alerts is for all bots configured per servers.
-        """
-        data = await self.config.guild(ctx.guild).all()
-        online_notify = await self.config.guild(ctx.guild).online_notify()
-        if online == True:
-            await self.config.guild(ctx.guild).online_notify.set(True)
-        else:
-            await self.config.guild(ctx.guild).online_notify.set(False)
-        if not bot_user:
-            return await ctx.send_help()
-        if not bot_user.bot:
-            return await ctx.send("User is not a bot.")
-        async with self.config.guild(ctx.guild).watching() as watch_list:
-            watch_list.append(bot_user.id)
-        await ctx.send(f"Now watching: {bot_user.mention}.\nOnline alerts: {online_notify}")
-        if not data["reporting"]:
-            await self.config.guild(ctx.guild).reporting.set(ctx.message.channel.id)
-            await ctx.send(
-                f"Reporting channel set to: {ctx.message.channel.mention}. Use `{ctx.prefix}otherbot channel` to change this."
+    @otherbot_watch_offline.command(name="add")
+    async def otherbot_watch_offline_add(self, ctx: commands.Context, bot: discord.Member):
+        """Add a bot that will be tracked when it goes offline."""
+        if not bot.bot:
+            return await ctx.send(
+                "You can't track normal users. Please try again with a bot user."
             )
 
-    @watching.command()
-    @checks.admin_or_permissions(manage_roles=True)
-    async def online(self, ctx, true_or_false: bool = False):
-        """Choose if you want alerts when bot is back online."""
-        if true_or_false == True:
-            await self.config.guild(ctx.guild).online_notify.set(True)
-            return await ctx.send("Online alerts sets to `True`.")
-        else:
-            await self.config.guild(ctx.guild).online_notify.set(False)
-            return await ctx.send("Online alerts sets to `False`.")
+        async with self.config.guild(ctx.guild).watching() as watch_list:
+            watch_list.append(bot.id)
+        await ctx.send(f"I will now track {bot.mention} when it goes offline.")
 
-    @watching.command()
-    @checks.admin_or_permissions(manage_roles=True)
-    async def clear(self, ctx):
-        """Clear existing bots watching."""
-        msg = await ctx.send("Are you sure to clear all watched bots ?")
-        
-        pred = MessagePredicate.yes_or_no(ctx)
-        try:
-            await self.bot.wait_for("message", check=pred, timeout=10)
-        except asyncio.TimeoutError:
-            return await msg.edit(content="Response timed out.")
-        else:
-            if pred.result is True:
-                await self.config.guild(ctx.guild).watching.clear()
-                await msg.edit(content="Successfully cleared watched bots.")
-            else:
-                await msg.edit(content="Clear cancelled.")
+    @otherbot_watch_offline.command(name="remove")
+    async def otherbot_watch_offline_remove(self, ctx: commands.Context, bot: discord.Member):
+        """Removes a bot currently tracked."""
+        if not bot.bot:
+            return await ctx.send(
+                "You can't choose a normal user. Please try again with a bot user."
+            )
 
-    @watching.command()
-    @checks.admin_or_permissions(manage_roles=True)
-    async def list(self, ctx):
-        """List existing bots."""
-        data = await self.config.guild(ctx.guild).all()
-        online_notify = await self.config.guild(ctx.guild).online_notify()
-        msg = f"```Online alerts: {online_notify}\n"
-        msg += "Watching these bots:\n\n"
-        if not data["watching"]:
-            msg += "None.```"
-        for saved_bot_id in data["watching"]:
-            bot_user = await self.bot.fetch_user(saved_bot_id)
-            if len(bot_user.name) > 16:
-                bot_name = f"{bot_user.name:16}...#{bot_user.discriminator}"
-            else:
-                bot_name = f"{bot_user.name}#{bot_user.discriminator}"
-            msg += f"{bot_name:24} ({bot_user.id})\n"
-        msg += "```"
-        return await ctx.send(msg)
+        async with self.config.guild(ctx.guild).watching() as watch_list:
+            try:
+                watch_list.remove(bot)
+                await ctx.send(
+                    f"Successfully removed {bot.mention} from offline tracked bot list."
+                )
+            except ValueError:
+                await ctx.send(f"{bot.mention} is not currently tracked.")
+
+    @otherbot_watch_offline.command(name="list")
+    async def otherbot_watch_offline_list(self, ctx: commands.Context):
+        """Lists currently tracked bots."""
+        watch_list = await self.config.guild(ctx.guild).watching()
+        if not watch_list:
+            return await ctx.send("There is currently no bots tracked for offline status.")
+
+        await ctx.send(
+            f"{len(watch_list):,} bot{'s' if len(watch_list) > 1 else ''} are currently tracked for offline status:\n"
+            + ", ".join([self.bot.get_user(bots).mention for bots in watch_list])
+        )
+
+    @otherbot_watch.group(name="online")
+    async def otherbot_watch_online(self, ctx: commands.Context):
+        """Manage online notifications."""
+        pass
+
+    @otherbot_watch_online.command(name="add")
+    async def otherbot_watch_online_add(self, ctx: commands.Context, bot: discord.Member):
+        """Add a bot that will be tracked when it comes back online."""
+        if not bot.bot:
+            return await ctx.send(
+                "You can't track normal users. Please try again with a bot user."
+            )
+
+        async with self.config.guild(ctx.guild).online_watching() as watch_list:
+            watch_list.append(bot.id)
+        await ctx.send(f"I will now track {bot.mention} when it goes back online.")
+
+    @otherbot_watch_online.command(name="remove")
+    async def otherbot_watch_online_remove(self, ctx: commands.Context, bot: discord.Member):
+        """Removes a bot currently tracked."""
+        if not bot.bot:
+            return await ctx.send(
+                "You can't choose a normal user. Please try again with a bot user."
+            )
+
+        async with self.config.guild(ctx.guild).online_watching() as watch_list:
+            try:
+                watch_list.remove(bot)
+                await ctx.send(f"Successfully removed {bot.mention} from online tracked bot list.")
+            except ValueError:
+                await ctx.send(f"{bot.mention} is not currently tracked.")
+
+    @otherbot_watch_online.command(name="list")
+    async def otherbot_watch_online_list(self, ctx: commands.Context):
+        """Lists currently tracked bots."""
+        watch_list = await self.config.guild(ctx.guild).online_watching()
+        if not watch_list:
+            return await ctx.send("There is currently no bots tracked for online status.")
+
+        await ctx.send(
+            f"{len(watch_list):,} bot{'s' if len(watch_list) > 1 else ''} are currently tracked for online status:\n"
+            + ", ".join([self.bot.get_user(bots).mention for bots in watch_list])
+        )
 
     @commands.Cog.listener()
     async def on_member_update(self, before, after):
         if after.guild is None or not after.bot:
             return
+
         data = await self.config.guild(after.guild).all()
-        channel_object = self.bot.get_channel(data["reporting"])
+        channel = self.bot.get_channel(data["reporting"])
+        if not channel:
+            return
         if after.status == discord.Status.offline and (after.id in data["watching"]):
-            await self.config.guild(after.guild).sent_online.set(False)
             em = discord.Embed(
-                    color=0x8b0000,
-                    description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
-                    timestamp=datetime.utcnow()
+                color=0x8B0000,
+                description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
+                timestamp=datetime.utcnow(),
             )
             if not data["ping"]:
-                await channel_object.send(embed=em)
+                await channel.send(embed=em)
             else:
-                await channel_object.send("<@&{}>".format(data["ping"]), embed=em)
-        elif (
-            data["online_notify"]
-            and after.status == discord.Status.online
-            and (after.id in data["watching"])
-        ):
-            await self.config.guild(after.guild).sent_online.set(True)
+                await channel.send("<@&{}>".format(data["ping"]), embed=em)
+        elif after.status != discord.Status.offline and (after.id in data["online_watching"]):
             em = discord.Embed(
-                    color=0x008800,
-                    description=f'{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}',
-                    timestamp=datetime.utcnow()
+                color=0x008800,
+                description=f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}",
+                timestamp=datetime.utcnow(),
             )
-            if not data["sent_online"]:
-                if not data["ping"]:
-                    await channel_object.send(embed=em)
-                else:
-                    await channel_object.send("<@&{}>".format(data["ping"]), embed=em)
+            if not data["ping"]:
+                await channel.send(embed=em)
+            else:
+                await channel.send("<@&{}>".format(data["ping"]), embed=em)
         else:
-            pass
+            return
