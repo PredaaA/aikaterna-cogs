@@ -7,17 +7,13 @@ from datetime import datetime
 
 class Otherbot(commands.Cog):
     __author__ = ["aikaterna", "Predä"]
-    __version__ = "0.5"
+    __version__ = "0.5.1"
 
     def __init__(self, bot):
         self.bot = bot
         self.config = Config.get_conf(self, 2730321001, force_registration=True)
         self.config.register_guild(
-            ping=None,
-            reporting=None,
-            watching=[],
-            online_watching=[],
-            online_notification_sent=False,
+            ping=None, reporting=None, watching=[], online_watching=[],
         )
         self.convert_data = bot.loop.create_task(self.data_convert())
 
@@ -275,7 +271,11 @@ class Otherbot(commands.Cog):
         channel = self.bot.get_channel(data["reporting"])
         if not channel:
             return
-        if after.status == discord.Status.offline and (after.id in data["watching"]):
+        if (
+            before.status != discord.Status.offline
+            and after.status == discord.Status.offline
+            and (after.id in data["watching"])
+        ):
             em = discord.Embed(
                 color=0x8B0000,
                 description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
@@ -285,14 +285,10 @@ class Otherbot(commands.Cog):
                 await channel.send(embed=em)
             else:
                 await channel.send("<@&{}>".format(data["ping"]), embed=em)
-            if data["online_notification_sent"]:
-                await self.config.guild(after.guild).online_notification_sent.set(False)
-        elif after.status == discord.Status.offline and data["online_notification_sent"]:
-            await self.config.guild(after.guild).online_notification_sent.set(False)
         elif (
-            after.status != discord.Status.offline
+            before.status == discord.Status.offline
+            and after.status != discord.Status.offline
             and (after.id in data["online_watching"])
-            and not data["online_notification_sent"]
         ):
             em = discord.Embed(
                 color=0x008800,
@@ -303,6 +299,5 @@ class Otherbot(commands.Cog):
                 await channel.send(embed=em)
             else:
                 await channel.send("<@&{}>".format(data["ping"]), embed=em)
-            await self.config.guild(after.guild).online_notification_sent.set(True)
         else:
             return
