@@ -281,10 +281,15 @@ class Otherbot(commands.Cog):
                 description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
                 timestamp=datetime.utcnow(),
             )
-            if not data["ping"]:
-                await channel.send(embed=em)
-            else:
-                await channel.send("<@&{}>".format(data["ping"]), embed=em)
+            try:
+                if not data["ping"]:
+                    await channel.send(embed=em)
+                else:
+                    await channel.send("<@&{}>".format(data["ping"]), embed=em)
+            except discord.Forbidden:
+                async with self.config.guild(after.guild).watching() as old_data:
+                    old_data.remove(after.id)
+                return
         elif (
             before.status == discord.Status.offline
             and after.status != discord.Status.offline
@@ -295,9 +300,14 @@ class Otherbot(commands.Cog):
                 description=f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}",
                 timestamp=datetime.utcnow(),
             )
-            if not data["ping"]:
-                await channel.send(embed=em)
-            else:
-                await channel.send("<@&{}>".format(data["ping"]), embed=em)
+            try:
+                if not data["ping"]:
+                    await channel.send(embed=em)
+                else:
+                    await channel.send("<@&{}>".format(data["ping"]), embed=em)
+            except discord.Forbidden:
+                async with self.config.guild(after.guild).online_watching() as old_data:
+                    old_data.remove(after.id)
+                return
         else:
             return
