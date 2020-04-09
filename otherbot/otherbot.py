@@ -7,7 +7,7 @@ from datetime import datetime
 
 class Otherbot(commands.Cog):
     __author__ = ["aikaterna", "Predä"]
-    __version__ = "0.5.1"
+    __version__ = "0.5.2"
 
     def __init__(self, bot):
         self.bot = bot
@@ -199,7 +199,7 @@ class Otherbot(commands.Cog):
 
         async with self.config.guild(ctx.guild).watching() as watch_list:
             try:
-                watch_list.remove(bot)
+                watch_list.remove(bot.id)
                 await ctx.send(
                     f"Successfully removed {bot.mention} from offline tracked bot list."
                 )
@@ -245,7 +245,7 @@ class Otherbot(commands.Cog):
 
         async with self.config.guild(ctx.guild).online_watching() as watch_list:
             try:
-                watch_list.remove(bot)
+                watch_list.remove(bot.id)
                 await ctx.send(f"Successfully removed {bot.mention} from online tracked bot list.")
             except ValueError:
                 await ctx.send(f"{bot.mention} is not currently tracked.")
