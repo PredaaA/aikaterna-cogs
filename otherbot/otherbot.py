@@ -33,6 +33,15 @@ class Otherbot(commands.Cog):
                     for to_del in ["online_notify", "sent_online"]:
                         raw_data.pop(to_del)
 
+    async def get_watching(self, watch_list: list):
+        data = []
+        for user_id in watch_list:
+            user = self.bot.get_user(user_id)
+            if not user:
+                data.append(user_id)
+            data.append(user)
+        return data
+
     @commands.group()
     @commands.guild_only()
     @checks.admin_or_permissions(manage_roles=True)
@@ -71,12 +80,7 @@ class Otherbot(commands.Cog):
                         if guild_data["watching"]:
                             msg += (
                                 f"**{name}**: "
-                                + " ".join(
-                                    [
-                                        self.bot.get_user(bots).mention
-                                        for bots in guild_data["watching"]
-                                    ]
-                                )
+                                + " ".join(await self.get_watching(guild_data["watching"]))
                                 + "\n"
                             )
                         else:
@@ -85,12 +89,7 @@ class Otherbot(commands.Cog):
                         if guild_data["online_watching"]:
                             msg += (
                                 f"**{name}**: "
-                                + " ".join(
-                                    [
-                                        self.bot.get_user(bots).mention
-                                        for bots in guild_data["online_watching"]
-                                    ]
-                                )
+                                + " ".join(await self.get_watching(guild_data["online_watching"]))
                                 + "\n"
                             )
                         else:
@@ -117,12 +116,7 @@ class Otherbot(commands.Cog):
                         if guild_data["watching"]:
                             msg += (
                                 f"{name}: "
-                                + ", ".join(
-                                    [
-                                        self.bot.get_user(bots).mention
-                                        for bots in guild_data["watching"]
-                                    ]
-                                )
+                                + ", ".join(await self.get_watching(guild_data["watching"]))
                                 + "\n"
                             )
                         else:
@@ -131,12 +125,7 @@ class Otherbot(commands.Cog):
                         if guild_data["online_watching"]:
                             msg += (
                                 f"{name}: "
-                                + " ".join(
-                                    [
-                                        self.bot.get_user(bots).mention
-                                        for bots in guild_data["online_watching"]
-                                    ]
-                                )
+                                + " ".join(await self.get_watching(guild_data["online_watching"]))
                                 + "\n"
                             )
                         else:
@@ -209,13 +198,14 @@ class Otherbot(commands.Cog):
     @otherbot_watch_offline.command(name="list")
     async def otherbot_watch_offline_list(self, ctx: commands.Context):
         """Lists currently tracked bots."""
-        watch_list = await self.config.guild(ctx.guild).watching()
-        if not watch_list:
+        watching = await self.config.guild(ctx.guild).watching()
+        if not watching:
             return await ctx.send("There is currently no bots tracked for offline status.")
 
+        watching_list = await self.get_watching(watching)
         await ctx.send(
-            f"{len(watch_list):,} bot{'s' if len(watch_list) > 1 else ''} are currently tracked for offline status:\n"
-            + ", ".join([self.bot.get_user(bots).mention for bots in watch_list])
+            f"{len(watching):,} bot{'s' if len(watching) > 1 else ''} are currently tracked for offline status:\n"
+            + ", ".join(watching_list)
         )
 
     @otherbot_watch.group(name="online")
@@ -253,17 +243,18 @@ class Otherbot(commands.Cog):
     @otherbot_watch_online.command(name="list")
     async def otherbot_watch_online_list(self, ctx: commands.Context):
         """Lists currently tracked bots."""
-        watch_list = await self.config.guild(ctx.guild).online_watching()
-        if not watch_list:
+        watching = await self.config.guild(ctx.guild).online_watching()
+        if not watching:
             return await ctx.send("There is currently no bots tracked for online status.")
 
+        watching_list = await self.get_watching(watching)
         await ctx.send(
-            f"{len(watch_list):,} bot{'s' if len(watch_list) > 1 else ''} are currently tracked for online status:\n"
-            + ", ".join([self.bot.get_user(bots).mention for bots in watch_list])
+            f"{len(watching):,} bot{'s' if len(watching) > 1 else ''} are currently tracked for online status:\n"
+            + ", ".join(watching_list)
         )
 
     @commands.Cog.listener()
-    async def on_member_update(self, before, after):
+    async def on_member_update(self, before: discord.Member, after: discord.Member):
         if after.guild is None or not after.bot:
             return
 
