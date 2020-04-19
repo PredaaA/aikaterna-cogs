@@ -7,7 +7,7 @@ from datetime import datetime
 
 class Otherbot(commands.Cog):
     __author__ = ["aikaterna", "Predä"]
-    __version__ = "0.5.2"
+    __version__ = "0.5.4"
 
     def __init__(self, bot):
         self.bot = bot
