@@ -39,7 +39,8 @@ class Otherbot(commands.Cog):
             user = self.bot.get_user(user_id)
             if not user:
                 data.append(user_id)
-            data.append(user.mention)
+            else:
+                data.append(user.mention)
         return data
 
     @commands.group()
