@@ -1,5 +1,5 @@
 import discord
-
+from redbot.core.bot import Red
 from redbot.core import commands, checks, Config
 
 from datetime import datetime
@@ -7,31 +7,21 @@ from datetime import datetime
 
 class Otherbot(commands.Cog):
     __author__ = ["aikaterna", "Predä"]
-    __version__ = "0.5.4"
+    __version__ = "0.6"
 
-    def __init__(self, bot):
+    def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, 2730321001, force_registration=True)
         self.config.register_guild(
             ping=None, reporting=None, watching=[], online_watching=[],
         )
-        self.convert_data = bot.loop.create_task(self.data_convert())
+
+    async def generate_cache(self):
+        # Thanks flare: https://github.com/aikaterna/aikaterna-cogs/pull/131
+        self.otherbot_cache = await self.config.all_guilds()
 
     def cog_unload(self):
-        if self.convert_data:
-            self.convert_data.cancel()
-
-    async def data_convert(self):
-        await self.bot.wait_until_ready()
-        for guild in self.bot.guilds:
-            raw_data = await self.config.guild(guild).all()
-            for k, v in raw_data.items():
-                if k == "watching" and not v:
-                    continue
-                if k == "online_notify" and v is True:
-                    await self.config.guild(guild).online_watching.set(raw_data["watching"])
-                    for to_del in ["online_notify", "sent_online"]:
-                        raw_data.pop(to_del)
+        self.otherbot_cache.clear()
 
     async def get_watching(self, watch_list: list, watch_type: str, guild: int):
         data = []
@@ -162,6 +152,7 @@ class Otherbot(commands.Cog):
             channel = ctx.channel
         await self.config.guild(ctx.guild).reporting.set(channel.id)
         await ctx.send(f"Reporting channel set to: {channel.mention}.")
+        await self.generate_cache()
 
     @otherbot.command()
     async def pingrole(self, ctx: commands.Context, role_name: discord.Role = None):
@@ -173,6 +164,7 @@ class Otherbot(commands.Cog):
         pingrole_id = await self.config.guild(ctx.guild).ping()
         pingrole_obj = discord.utils.get(ctx.guild.roles, id=pingrole_id)
         await ctx.send(f"Ping role set to: `{pingrole_obj.name}`.")
+        await self.generate_cache()
 
     @otherbot.group(name="watch", aliases=["watching"])
     async def otherbot_watch(self, ctx: commands.Context):
@@ -195,6 +187,7 @@ class Otherbot(commands.Cog):
         async with self.config.guild(ctx.guild).watching() as watch_list:
             watch_list.append(bot.id)
         await ctx.send(f"I will now track {bot.mention} when it goes offline.")
+        await self.generate_cache()
 
     @otherbot_watch_offline.command(name="remove")
     async def otherbot_watch_offline_remove(self, ctx: commands.Context, bot: discord.Member):
@@ -212,6 +205,7 @@ class Otherbot(commands.Cog):
                 )
             except ValueError:
                 await ctx.send(f"{bot.mention} is not currently tracked.")
+        await self.generate_cache()
 
     @otherbot_watch_offline.command(name="list")
     async def otherbot_watch_offline_list(self, ctx: commands.Context):
@@ -225,6 +219,7 @@ class Otherbot(commands.Cog):
             f"{len(watching):,} bot{'s' if len(watching) > 1 else ''} are currently tracked for offline status:\n"
             + ", ".join(watching_list)
         )
+        await self.generate_cache()
 
     @otherbot_watch.group(name="online")
     async def otherbot_watch_online(self, ctx: commands.Context):
@@ -242,6 +237,7 @@ class Otherbot(commands.Cog):
         async with self.config.guild(ctx.guild).online_watching() as watch_list:
             watch_list.append(bot.id)
         await ctx.send(f"I will now track {bot.mention} when it goes back online.")
+        await self.generate_cache()
 
     @otherbot_watch_online.command(name="remove")
     async def otherbot_watch_online_remove(self, ctx: commands.Context, bot: discord.Member):
@@ -257,6 +253,7 @@ class Otherbot(commands.Cog):
                 await ctx.send(f"Successfully removed {bot.mention} from online tracked bot list.")
             except ValueError:
                 await ctx.send(f"{bot.mention} is not currently tracked.")
+        await self.generate_cache()
 
     @otherbot_watch_online.command(name="list")
     async def otherbot_watch_online_list(self, ctx: commands.Context):
@@ -270,13 +267,16 @@ class Otherbot(commands.Cog):
             f"{len(watching):,} bot{'s' if len(watching) > 1 else ''} are currently tracked for online status:\n"
             + ", ".join(watching_list)
         )
+        await self.generate_cache()
 
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if after.guild is None or not after.bot:
             return
 
-        data = await self.config.guild(after.guild).all()
+        data = self.otherbot_cache.get(after.guild.id)
+        if data is None:
+            return
         channel = self.bot.get_channel(data["reporting"])
         if not channel:
             return
