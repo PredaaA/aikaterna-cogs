@@ -4,16 +4,24 @@ from redbot.core import commands, checks, Config
 
 from datetime import datetime
 
+DEFAULT_OFFLINE_EMOJI = "\N{WHITE HEAVY CHECK MARK}"
+DEFAULT_ONLINE_EMOJI = "\N{LARGE RED CIRCLE}"
+
 
 class Otherbot(commands.Cog):
     __author__ = ["aikaterna", "Predä"]
-    __version__ = "0.6"
+    __version__ = "0.8"
 
     def __init__(self, bot: Red):
         self.bot = bot
         self.config = Config.get_conf(self, 2730321001, force_registration=True)
         self.config.register_guild(
-            ping=None, reporting=None, watching=[], online_watching=[],
+            ping=None,
+            reporting=None,
+            watching=[],
+            online_watching=[],
+            offline_emoji=DEFAULT_OFFLINE_EMOJI,
+            online_emoji=DEFAULT_ONLINE_EMOJI,
         )
 
     async def generate_cache(self):
@@ -169,12 +177,10 @@ class Otherbot(commands.Cog):
     @otherbot.group(name="watch", aliases=["watching"])
     async def otherbot_watch(self, ctx: commands.Context):
         """Watch settings."""
-        pass
 
     @otherbot_watch.group(name="offline")
     async def otherbot_watch_offline(self, ctx: commands.Context):
         """Manage offline notifications."""
-        pass
 
     @otherbot_watch_offline.command(name="add")
     async def otherbot_watch_offline_add(self, ctx: commands.Context, bot: discord.Member):
@@ -221,10 +227,20 @@ class Otherbot(commands.Cog):
         )
         await self.generate_cache()
 
+    @otherbot_watch_offline.command(name="emoji")
+    async def otherbot_watch_offline_emoji(self, ctx: commands.Context, *, emoji: str = None):
+        """Choose which emoji that will be used for offline messages."""
+        if not emoji:
+            await self.config.guild(ctx.guild).offline_emoji.set(DEFAULT_OFFLINE_EMOJI)
+            await ctx.send(f"Offline emoji resetted to default: {DEFAULT_OFFLINE_EMOJI}")
+        else:
+            await self.config.guild(ctx.guild).offline_emoji.set(emoji)
+            await ctx.tick()
+        await self.generate_cache()
+
     @otherbot_watch.group(name="online")
     async def otherbot_watch_online(self, ctx: commands.Context):
         """Manage online notifications."""
-        pass
 
     @otherbot_watch_online.command(name="add")
     async def otherbot_watch_online_add(self, ctx: commands.Context, bot: discord.Member):
@@ -269,6 +285,17 @@ class Otherbot(commands.Cog):
         )
         await self.generate_cache()
 
+    @otherbot_watch_online.command(name="emoji")
+    async def otherbot_watch_online_emoji(self, ctx: commands.Context, *, emoji: str = None):
+        """Choose which emoji that will be used for online messages."""
+        if not emoji:
+            await self.config.guild(ctx.guild).online_emoji.set(DEFAULT_ONLINE_EMOJI)
+            await ctx.send(f"Online emoji resetted to default: {DEFAULT_ONLINE_EMOJI}")
+        else:
+            await self.config.guild(ctx.guild).online_emoji.set(emoji)
+            await ctx.tick()
+        await self.generate_cache()
+
     @commands.Cog.listener()
     async def on_member_update(self, before: discord.Member, after: discord.Member):
         if after.guild is None or not after.bot:
@@ -280,6 +307,8 @@ class Otherbot(commands.Cog):
         channel = self.bot.get_channel(data["reporting"])
         if not channel:
             return
+        if not (data["watching"] or data["online_watching"]):
+            return
         if (
             before.status != discord.Status.offline
             and after.status == discord.Status.offline
@@ -287,14 +316,14 @@ class Otherbot(commands.Cog):
         ):
             em = discord.Embed(
                 color=0x8B0000,
-                description=f"{after.mention} is offline. \N{LARGE RED CIRCLE}",
+                description=f"{after.mention} is offline. {data['offline_emoji']}",
                 timestamp=datetime.utcnow(),
             )
             try:
                 if not data["ping"]:
                     await channel.send(embed=em)
                 else:
-                    await channel.send("<@&{}>".format(data["ping"]), embed=em)
+                    await channel.send(f"<@&{data['ping']}>", embed=em)
             except discord.Forbidden:
                 async with self.config.guild(after.guild).watching() as old_data:
                     old_data.remove(after.id)
@@ -306,17 +335,15 @@ class Otherbot(commands.Cog):
         ):
             em = discord.Embed(
                 color=0x008800,
-                description=f"{after.mention} is back online. \N{WHITE HEAVY CHECK MARK}",
+                description=f"{after.mention} is back online. {data['online_emoji']}",
                 timestamp=datetime.utcnow(),
             )
             try:
                 if not data["ping"]:
                     await channel.send(embed=em)
                 else:
-                    await channel.send("<@&{}>".format(data["ping"]), embed=em)
+                    await channel.send(f"<@&{data['ping']}>", embed=em)
             except discord.Forbidden:
                 async with self.config.guild(after.guild).online_watching() as old_data:
                     old_data.remove(after.id)
                 return
-        else:
-            return
