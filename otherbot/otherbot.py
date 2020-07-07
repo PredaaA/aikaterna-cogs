@@ -4,8 +4,8 @@ from redbot.core import commands, checks, Config
 
 from datetime import datetime
 
-DEFAULT_OFFLINE_EMOJI = "\N{WHITE HEAVY CHECK MARK}"
-DEFAULT_ONLINE_EMOJI = "\N{LARGE RED CIRCLE}"
+DEFAULT_OFFLINE_EMOJI = "\N{LARGE RED CIRCLE}"
+DEFAULT_ONLINE_EMOJI = "\N{WHITE HEAVY CHECK MARK}"
 
 
 class Otherbot(commands.Cog):
