@@ -323,11 +323,17 @@ class Otherbot(commands.Cog):
                 if not data["ping"]:
                     await channel.send(embed=em)
                 else:
-                    await channel.send(f"<@&{data['ping']}>", embed=em)
+                    if discord.version_info.minor < 4:
+                        await channel.send(f"<@&{data['ping']}>", embed=em)
+                    else:
+                        await channel.send(
+                            f"<@&{data['ping']}>",
+                            embed=em,
+                            allowed_mentions=discord.AllowedMentions(roles=True),
+                        )
             except discord.Forbidden:
                 async with self.config.guild(after.guild).watching() as old_data:
                     old_data.remove(after.id)
-                return
         elif (
             before.status == discord.Status.offline
             and after.status != discord.Status.offline
@@ -342,8 +348,14 @@ class Otherbot(commands.Cog):
                 if not data["ping"]:
                     await channel.send(embed=em)
                 else:
-                    await channel.send(f"<@&{data['ping']}>", embed=em)
+                    if discord.version_info.minor < 4:
+                        await channel.send(f"<@&{data['ping']}>", embed=em)
+                    else:
+                        await channel.send(
+                            f"<@&{data['ping']}>",
+                            embed=em,
+                            allowed_mentions=discord.AllowedMentions(roles=True),
+                        )
             except discord.Forbidden:
                 async with self.config.guild(after.guild).online_watching() as old_data:
                     old_data.remove(after.id)
-                return
