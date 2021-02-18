@@ -14,6 +14,7 @@ from typing import Optional
 from types import MappingProxyType, SimpleNamespace
 from urllib.parse import urlparse
 
+from redbot.core.bot import Red
 from redbot.core import checks, commands, Config
 from redbot.core.utils.chat_formatting import bold, box, escape, humanize_list, pagify
 
@@ -31,7 +32,7 @@ __version__ = "1.3.8"
 class RSS(commands.Cog):
     """RSS feeds for your server."""
 
-    def __init__(self, bot):
+    def __init__(self, bot: Red):
         self.bot = bot
 
         self.config = Config.get_conf(self, 2761331001, force_registration=True)
@@ -286,9 +287,12 @@ class RSS(commands.Cog):
     def _get_channel_object(self, channel_id: int):
         """Helper for rss feed loop."""
         channel = self.bot.get_channel(channel_id)
-        if channel and channel.permissions_for(channel.guild.me).send_messages:
-            return channel
-        return None
+        if not channel:
+            return None
+        if not channel.permissions_for(channel.guild.me).send_messages:
+            return False
+
+        return channel
 
     async def _get_feed_names(self, channel: discord.TextChannel):
         """Helper for rss list."""
@@ -1323,14 +1327,15 @@ class RSS(commands.Cog):
             for channel_id, channel_feed_list in config_data.items():
                 channel = self._get_channel_object(channel_id)
                 if not channel:
-                    log.info(
-                        f"Response channel {channel_id} not found or no perms to send messages, removing channel from config"
-                    )
-                    await self.config.channel_from_id(int(channel_id)).clear()  # Remove entries from dead channel
+                    if channel is False:
+                        log.info(
+                            f"Response channel {channel_id} no perms to send messages, removing channel from config"
+                        )
+                        await self.config.channel_from_id(int(channel_id)).clear()  # Remove entries from dead channel
                     continue
 
-                if await self.bot.cog_disabled_in_guild(self, channel.guild):
-                    continue
+                # if await self.bot.cog_disabled_in_guild(self, channel.guild):
+                #     continue
 
                 for feed_key, feed in channel_feed_list.items():
                     for feed_name, feed_data in feed.items():
