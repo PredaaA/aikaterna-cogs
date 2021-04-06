@@ -26,7 +26,7 @@ from .tag_type import INTERNAL_TAGS, VALID_IMAGES, TagType
 log = logging.getLogger("red.aikaterna.rss")
 
 
-__version__ = "1.3.8"
+__version__ = "1.4.5"
 
 
 class RSS(commands.Cog):
@@ -37,13 +37,14 @@ class RSS(commands.Cog):
 
         self.config = Config.get_conf(self, 2761331001, force_registration=True)
         self.config.register_channel(feeds={})
+        self.config.register_global(use_published=["www.youtube.com"])
 
         self._post_queue = asyncio.PriorityQueue()
         self._post_queue_size = None
 
         self._read_feeds_loop = None
 
-        self._headers = {'User-Agent': 'Python/3.8'}
+        self._headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 Firefox/83.0'}
 
     def initialize(self):
         self._read_feeds_loop = self.bot.loop.create_task(self.read_feeds())
@@ -74,11 +75,16 @@ class RSS(commands.Cog):
         if not rss_exists:
             feedparser_obj = await self._fetch_feedparser_object(url)
             if not feedparser_obj:
-                await ctx.send("Couldn't fetch that feed for some reason.")
+                await ctx.send("Couldn't fetch that feed: there were no feed objects found.")
                 return
 
             # sort everything by time if a time value is present
-            sorted_feed_by_post_time = await self._sort_by_post_time(feedparser_obj)
+            if feedparser_obj.entries:
+                # this feed has posts
+                sorted_feed_by_post_time = await self._sort_by_post_time(feedparser_obj.entries)
+            else:
+                # this feed does not have posts, but it has a header with channel information
+                sorted_feed_by_post_time = [feedparser_obj.feed]
 
             # add additional tags/images/clean html
             feedparser_plus_obj = await self._add_to_feedparser_object(sorted_feed_by_post_time[0], url)
@@ -220,12 +226,11 @@ class RSS(commands.Cog):
         except KeyError:
             pass
 
-        # change published_parsed or updated_parsed into a datetime object for embed footers
-        for time_tag in ["published_parsed", "updated_parsed"]:
+        # change published_parsed and updated_parsed into a datetime object for embed footers
+        for time_tag in ["updated_parsed", "published_parsed"]:
             try:
                 if isinstance(rss_object[time_tag], time.struct_time):
                     rss_object[f"{time_tag}_datetime"] = datetime.datetime(*rss_object[time_tag][:6])
-                    break 
             except KeyError:
                 pass
 
@@ -284,7 +289,29 @@ class RSS(commands.Cog):
                 return True
         return False
 
-    def _get_channel_object(self, channel_id: int):
+    @staticmethod
+    def _find_website(website_url: str):
+        """Helper for rss parse."""
+        result = urlparse(website_url)
+        if result.scheme:
+            # https://www.website.com/...
+            if result.netloc:
+                website = result.netloc
+            else:
+                return None
+        else:
+            # www.website.com/...
+            if result.path:
+                website = result.path.split("/")[0]
+            else:
+                return None
+
+        if len(website.split(".")) < 3:
+            return None
+
+        return website
+
+    async def _get_channel_object(self, channel_id: int):
         """Helper for rss feed loop."""
         channel = self.bot.get_channel(channel_id)
         if not channel:
@@ -334,30 +361,43 @@ class RSS(commands.Cog):
             async with aiohttp.ClientSession(headers=self._headers, timeout=timeout) as session:
                 async with session.get(url) as resp:
                     html = await resp.read()
-            return html
+            return html, None
         except aiohttp.client_exceptions.ClientConnectorError:
-            log.error(f"aiohttp failure accessing feed at url:\n\t{url}", exc_info=True)
-            return None
+            friendly_msg = "There was an OSError or the connection failed."
+            msg = f"aiohttp failure accessing feed at url:\n\t{url}"
+            log.error(msg, exc_info=True)
+            return None, friendly_msg
+        except aiohttp.client_exceptions.ClientPayloadError as e:
+            friendly_msg = "The website closed the connection prematurely or the response was malformed.\n"
+            friendly_msg += f"The error returned was: `{str(e)}`\n"
+            friendly_msg += "For more technical information, check your bot's console or logs."
+            msg = f"content error while reading feed at url:\n\t{url}"
+            log.error(msg, exc_info=True)
+            return None, friendly_msg
         except asyncio.exceptions.TimeoutError:
-            log.error(f"asyncio timeout while accessing feed at url:\n\t{url}")
-            return None
+            friendly_msg = "The bot timed out while trying to access that content."
+            msg = f"asyncio timeout while accessing feed at url:\n\t{url}"
+            log.error(msg, exc_info=True)
+            return None, friendly_msg
         except Exception:
-            log.error(f"General failure accessing feed at url:\n\t{url}", exc_info=True)
-            return None
+            friendly_msg = "There was an unexpected error. Check your console for more information."
+            msg = f"General failure accessing feed at url:\n\t{url}"
+            log.error(msg, exc_info=True)
+            return None, friendly_msg
 
     async def _fetch_feedparser_object(self, url: str):
-        """Get all feedparser entries from a url."""
-        html = await self._get_url_content(url)
+        """Get a full feedparser object from a url: channel header + items."""
+        html, error_msg = await self._get_url_content(url)
         if not html:
-            return None
+            return SimpleNamespace(entries=None, error=error_msg, url=url)
 
         feedparser_obj = feedparser.parse(html)
-
         if feedparser_obj.bozo:
-            log.debug(f"Feed at {url} is bad or took too long to respond.")
-            return None
+            error_msg = f"Bozo feed: feedparser is unable to parse the response from {url}.\n"
+            error_msg += f"Feedparser error message: `{feedparser_obj.bozo_exception}`"
+            return SimpleNamespace(entries=None, error=error_msg, url=url)
 
-        return feedparser_obj.entries
+        return feedparser_obj
 
     async def _add_to_feedparser_object(self, feedparser_obj: feedparser.util.FeedParserDict, url: str):
         """
@@ -394,9 +434,18 @@ class RSS(commands.Cog):
         return rss_object
 
     async def _sort_by_post_time(self, feedparser_obj: feedparser.util.FeedParserDict):
-        for time_tag in ["published_parsed", "updated_parsed"]:
+        base_url = urlparse(feedparser_obj[0].get("link")).netloc
+        use_published_parsed_override = await self.config.use_published()
+
+        if base_url in use_published_parsed_override:
+            time_tag = ["published_parsed"]
+        else:
+            time_tag = ["updated_parsed", "published_parsed"]
+
+        for tag in time_tag:
             try:
-                sorted_feed_by_post_time = sorted(feedparser_obj, key=lambda x: x.get(time_tag), reverse=True)
+                baseline_time = time.struct_time((2021, 1, 1, 12, 0, 0, 4, 1, -1))
+                sorted_feed_by_post_time = sorted(feedparser_obj, key=lambda x: x.get(tag, baseline_time), reverse=True)
                 break
             except TypeError:
                 sorted_feed_by_post_time = feedparser_obj
@@ -405,9 +454,22 @@ class RSS(commands.Cog):
 
     async def _time_tag_validation(self, entry: feedparser.util.FeedParserDict):
         """Gets a unix timestamp if it's available from a single feedparser post entry."""
-        entry_time = entry.get("published_parsed", None)
-        if not entry_time:
+        feed_link = entry.get("link", None)
+        if feed_link:
+            base_url = urlparse(feed_link).netloc
+        else:
+            return None
+
+        # check for a feed time override, if a feed is being problematic regarding updated_parsed
+        # usage (i.e. a feed entry keeps reposting with no perceived change in content)
+        use_published_parsed_override = await self.config.use_published()
+        if base_url in use_published_parsed_override:
+            entry_time = entry.get("published_parsed", None)
+        else:
             entry_time = entry.get("updated_parsed", None)
+            if not entry_time:
+                entry_time = entry.get("published_parsed", None)
+
         if isinstance(entry_time, time.struct_time):
             entry_time = time.mktime(entry_time)
         if entry_time:
@@ -450,14 +512,17 @@ class RSS(commands.Cog):
 
         if all([result.scheme, result.netloc, result.path]):
             if feed_check:
-                text = await self._get_url_content(url)
+                text, error_msg = await self._get_url_content(url)
                 if not text:
-                    log.debug(f"no text from _get_url_content: {url}")
+                    raise NoFeedContent(error_msg)
                     return False
 
                 rss = feedparser.parse(text)
                 if rss.bozo:
-                    log.debug(f"bozo feed at {url}")
+                    msg = f"Bozo feed: feedparser is unable to parse the response from {url}.\n\n"
+                    msg += "Received content preview:\n"
+                    msg += box(rss.feed.get("summary", str(rss))[:1500])
+                    raise NoFeedContent(msg)
                     return False
                 else:
                     return True
@@ -511,7 +576,12 @@ class RSS(commands.Cog):
             return
 
         async with ctx.typing():
-            valid_url = await self._valid_url(url)
+            try:
+                valid_url = await self._valid_url(url)
+            except NoFeedContent as e:
+                await ctx.send(str(e))
+                return
+              
             if valid_url:
                 await self._add_feed(ctx, feed_name.lower(), channel, url)
             else:
@@ -603,6 +673,17 @@ class RSS(commands.Cog):
         if image_tag_name is not None:
             if image_tag_name.startswith("$"):
                 image_tag_name = image_tag_name.strip("$")
+            else:
+                msg = "You must use a feed tag for this setting. "
+                msg += f"Feed tags start with `$` and can be found by using `{ctx.prefix}rss listtags` "
+                msg += "with the saved feed name.\nImages that are scraped from feed content are usually "
+                msg += "stored under the tags styled similar to `$content_image01`: subsequent scraped images "
+                msg += "will be in tags named `$content_image02`, `$content_image03`, etc. Not every feed entry "
+                msg += "will have the same amount of scraped image tags. Images can also be found under tags named "
+                msg += "`$media_content_plaintext`, if present.\nExperiment with tags by setting them as your "
+                msg += f"template with `{ctx.prefix}rss template` and using `{ctx.prefix}rss force` to view the content."
+                await ctx.send(msg)
+                return
 
         async with self.config.channel(channel).feeds() as feed_data:
             feed_data[feed_name]["embed_image"] = image_tag_name
@@ -639,6 +720,17 @@ class RSS(commands.Cog):
         if thumbnail_tag_name is not None:
             if thumbnail_tag_name.startswith("$"):
                 thumbnail_tag_name = thumbnail_tag_name.strip("$")
+            else:
+                msg = "You must use a feed tag for this setting. "
+                msg += f"Feed tags start with `$` and can be found by using `{ctx.prefix}rss listtags` "
+                msg += "with the saved feed name.\nImages that are scraped from feed content are usually "
+                msg += "stored under the tags styled similar to `$content_image01`: subsequent scraped images "
+                msg += "will be in tags named `$content_image02`, `$content_image03`, etc. Not every feed entry "
+                msg += "will have the same amount of scraped image tags. Images can also be found under tags named "
+                msg += "`$media_content_plaintext`, if present.\nExperiment with tags by setting them as your "
+                msg += f"template with `{ctx.prefix}rss template` and using `{ctx.prefix}rss force` to view the content."
+                await ctx.send(msg)
+                return
 
         async with self.config.channel(channel).feeds() as feed_data:
             feed_data[feed_name]["embed_thumbnail"] = thumbnail_tag_name
@@ -710,9 +802,9 @@ class RSS(commands.Cog):
         url_scheme = url_parse.scheme
         feed_url_types = ["application/rss+xml", "application/atom+xml", "text/xml", "application/rdf+xml"]
         for feed_type in feed_url_types:
-            possible_feeds = soup.find_all('link', rel='alternate', type=feed_type, href=True)
+            possible_feeds = soup.find_all("link", rel="alternate", type=feed_type, href=True)
             for feed in possible_feeds:
-                feed_url = feed.get('href', None)
+                feed_url = feed.get("href", None)
                 ls_feed_url = feed_url.lstrip("/")
                 if not feed_url:
                     continue
@@ -831,10 +923,16 @@ class RSS(commands.Cog):
         """Helper function for rss listtags."""
         msg = f"[ Available Tags for {feed_name} ]\n\n\t"
         feedparser_obj = await self._fetch_feedparser_object(rss_feed["url"])
+
         if not feedparser_obj:
-            await ctx.send("Couldn't fetch that feed for some reason.")
+            await ctx.send("Couldn't fetch that feed.")
             return
-        feedparser_plus_obj = await self._add_to_feedparser_object(feedparser_obj[0], rss_feed["url"])
+        if feedparser_obj.entries:
+            # this feed has posts
+            feedparser_plus_obj = await self._add_to_feedparser_object(feedparser_obj.entries[0], rss_feed["url"])
+        else:
+            # this feed does not have posts, but it has a header with channel information
+            feedparser_plus_obj = await self._add_to_feedparser_object(feedparser_obj.feed, rss_feed["url"])
 
         for tag_name, tag_content in sorted(feedparser_plus_obj.items()):
             if tag_name in INTERNAL_TAGS:
@@ -856,6 +954,74 @@ class RSS(commands.Cog):
         msg += "\n\t[*] = specially-generated tag, may not be present in every post"
 
         await ctx.send(box(msg, lang="ini"))
+
+    @checks.is_owner()
+    @rss.group(name="parse")
+    async def _rss_parse(self, ctx):
+        """
+        Change feed parsing for a specfic domain.
+
+        This is a global change per website.
+        The default is to use the feed's updated_parsed tag, and adding a website to this list will change the check to published_parsed.
+
+        Some feeds may spam feed entries as they are updating the updated_parsed slot on their feed, but not updating feed content.
+        In this case we can force specific sites to use the published_parsed slot instead by adding the website to this override list.
+        """
+        pass
+
+    @_rss_parse.command(name="add")
+    async def _rss_parse_add(self, ctx, website_url: str):
+        """
+        Add a website to the list for a time parsing override.
+
+        Use a website link formatted like `www.website.com` or `https://www.website.com`.
+        For more information, use `[p]help rss parse`.
+        """
+        website = self._find_website(website_url)
+        if not website:
+            msg = f"I can't seem to find a website in `{website_url}`. "
+            msg += "Use something like `https://www.website.com/` or `www.website.com`."
+            await ctx.send(msg)
+            return
+
+        override_list = await self.config.use_published()
+        if website in override_list:
+            await ctx.send(f"`{website}` is already in the parsing override list.")
+        else:
+            override_list.append(website)
+            await self.config.use_published.set(override_list)
+            await ctx.send(f"`{website}` was added to the parsing override list.")
+
+    @_rss_parse.command(name="list")
+    async def _rss_parse_list(self, ctx):
+        """
+        Show the list for time parsing overrides.
+
+        For more information, use `[p]help rss parse`.
+        """
+        override_list = await self.config.use_published()
+        if not override_list:
+            msg = "No site overrides saved."
+        else:
+            msg = "Active for:\n" + '\n'.join(override_list)
+        await ctx.send(box(msg))
+
+    @_rss_parse.command(name="remove", aliases=["delete", "del"])
+    async def _rss_parse_remove(self, ctx, website_url: str = None):
+        """
+        Remove a website from the list for a time parsing override.
+
+        Use a website link formatted like `www.website.com` or `https://www.website.com`.
+        For more information, use `[p]help rss parse`.
+        """
+        website = self._find_website(website_url)
+        override_list = await self.config.use_published()
+        if website in override_list:
+            override_list.remove(website)
+            await self.config.use_published.set(override_list)
+            await ctx.send(f"`{website}` was removed from the parsing override list.")
+        else:
+            await ctx.send(f"`{website}` isn't in the parsing override list.")
 
     @rss.command(name="remove", aliases=["delete", "del"])
     async def _rss_remove(self, ctx, feed_name: str, channel: Optional[discord.TextChannel] = None):
@@ -1045,11 +1211,21 @@ class RSS(commands.Cog):
         feedparser_obj = await self._fetch_feedparser_object(url)
         if not feedparser_obj:
             return
+        try:
+            log.debug(f"{feedparser_obj.error} Channel: {channel.id}")
+            return
+        except AttributeError:
+            pass
 
-        # sorting the entire feedparser object by published_parsed time if it exists, if not then updated_parsed
+        # sorting the entire feedparser object by updated_parsed time if it exists, if not then published_parsed
         # certain feeds can be rearranged by a user, causing all posts to be out of sequential post order
         # or some feeds are out of time order by default
-        sorted_feed_by_post_time = await self._sort_by_post_time(feedparser_obj)
+        if feedparser_obj.entries:
+            # this feed has posts
+            sorted_feed_by_post_time = await self._sort_by_post_time(feedparser_obj.entries)
+        else:
+            # this feed does not have posts, but it has a header with channel information
+            sorted_feed_by_post_time = [feedparser_obj.feed]
 
         if not force:
             entry_time = await self._time_tag_validation(sorted_feed_by_post_time[0])
@@ -1062,7 +1238,7 @@ class RSS(commands.Cog):
         feedparser_plus_objects = []
         for entry in sorted_feed_by_post_time:
 
-            # find the published_parsed (checked first) or an updatated_parsed tag if they are present
+            # find the updated_parsed (checked first) or an published_parsed tag if they are present
             entry_time = await self._time_tag_validation(entry)
 
             # we only need one feed entry if this is from rss force
@@ -1071,9 +1247,19 @@ class RSS(commands.Cog):
                 feedparser_plus_objects.append(feedparser_plus_obj)
                 break
 
-            # if this feed has a published_parsed or an updatated_parsed tag, it will use
+            # if this feed has a published_parsed or an updated_parsed tag, it will use
             # that time value present in entry_time to verify that the post is new.
             elif (entry_time and last_time) is not None:
+                # now that we are sorting by/saving updated_parsed instead of published_parsed (rss 1.4.0+)
+                # we can post an update for a post that already exists and has already been posted.
+                # this will only work for rss sites that are single-use like cloudflare status, discord status, etc
+                # where an update on the last post should be posted
+                # this can be overridden by a bot owner in the rss parse command, per problematic website
+                if (last_title == entry.title) and (last_link == entry.link) and (entry_time > last_time):
+                    log.debug(f"New update found for an existing post in {name} on cid {channel.id}")
+                    feedparser_plus_obj = await self._add_to_feedparser_object(entry, url)
+                    feedparser_plus_objects.append(feedparser_plus_obj)
+                # regular feed qualification after this
                 if (last_title != entry.title) and (last_link != entry.link) and (last_time < entry_time):
                     log.debug(f"New entry found via time validation for feed {name} on cid {channel.id}")
                     feedparser_plus_obj = await self._add_to_feedparser_object(entry, url)
@@ -1227,7 +1413,7 @@ class RSS(commands.Cog):
             embed_list.append(embed)
 
         # Add published timestamp to the last footer if it exists
-        time_tags = ["published_parsed_datetime", "updated_parsed_datetime"]
+        time_tags = ["updated_parsed_datetime", "published_parsed_datetime"]
         for time_tag in time_tags:
             try:
                 published_time = feedparser_plus_obj[time_tag]
@@ -1325,7 +1511,7 @@ class RSS(commands.Cog):
             config_data = await self.config.all_channels()
             total_index = 0
             for channel_id, channel_feed_list in config_data.items():
-                channel = self._get_channel_object(channel_id)
+                channel = await self._get_channel_object(channel_id)
                 if not channel:
                     if channel is False:
                         log.info(
@@ -1356,3 +1542,11 @@ class RSS(commands.Cog):
         except asyncio.queues.QueueEmpty:
             return None
         return to_check
+
+
+class NoFeedContent(Exception):
+    def __init__(self, m):
+        self.message = m
+    
+    def __str__(self):
+        return self.message
