@@ -311,7 +311,7 @@ class RSS(commands.Cog):
 
         return website
 
-    async def _get_channel_object(self, channel_id: int):
+    def _get_channel_object(self, channel_id: int):
         """Helper for rss feed loop."""
         channel = self.bot.get_channel(channel_id)
         if not channel:
@@ -1511,7 +1511,7 @@ class RSS(commands.Cog):
             config_data = await self.config.all_channels()
             total_index = 0
             for channel_id, channel_feed_list in config_data.items():
-                channel = await self._get_channel_object(channel_id)
+                channel = self._get_channel_object(channel_id)
                 if not channel:
                     if channel is False:
                         log.info(
