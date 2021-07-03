@@ -13,7 +13,7 @@ from redbot.core.utils.chat_formatting import (bold, box, humanize_list,
 from redbot.core.utils.menus import DEFAULT_CONTROLS, menu
 from redbot.core.utils.predicates import MessagePredicate
 
-__version__ = "3.1.5"
+__version__ = "3.1.6"
 
 
 class Hunting(commands.Cog):
@@ -63,7 +63,8 @@ class Hunting(commands.Cog):
                 channel_names = []
                 for channel_id in guild_data["channels"]:
                     channel_obj = self.bot.get_channel(channel_id)
-                    channel_names.append(channel_obj.name)
+                    if channel_obj:
+                        channel_names.append(channel_obj.name)
 
             hunting_mode = "Words" if guild_data["bang_words"] else "Reactions"
             reaction_time = "On" if guild_data["bang_time"] else "Off"

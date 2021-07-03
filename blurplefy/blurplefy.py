@@ -156,9 +156,9 @@ class Blurplefy(commands.Cog):
         embed = discord.Embed(title="", colour=0x7289DA)
         embed.add_field(name="Total amount of Blurple", value="{}%".format(blurplenesspercentage), inline=False)
         embed.add_field(name="Blurple (rgb(114, 137, 218))", value="{}%".format(percentblurple), inline=True)
-        embed.add_field(name="White (rgb(255, 255, 255))", value="{}\%".format(percentwhite), inline=True)
+        embed.add_field(name="White (rgb(255, 255, 255))", value="{}\\%".format(percentwhite), inline=True)
         embed.add_field(
-            name="Dark Blurple (rgb(78, 93, 148))", value="{}\%".format(percentdblurple), inline=True,
+            name="Dark Blurple (rgb(78, 93, 148))", value="{}\\%".format(percentdblurple), inline=True,
         )
         embed.add_field(
             name="Guide",
@@ -379,12 +379,12 @@ class Blurplefy(commands.Cog):
 
     @commands.command()
     async def countdown(self, ctx):
-        """Countdown to Discord's 6th Anniversary."""
+        """Countdown to Discord's 7th Anniversary."""
         embed = discord.Embed(name="", colour=0x7289DA)
-        timeleft = datetime.datetime(2020, 5, 13) + datetime.timedelta(hours=7) - datetime.datetime.utcnow()
+        timeleft = datetime.datetime(2021, 5, 13) + datetime.timedelta(hours=7) - datetime.datetime.utcnow()
         embed.set_author(name="Time left until Discord's 6th Anniversary")
         if int(timeleft.total_seconds()) < 0:
-            timeleft = datetime.datetime(2021, 5, 13) + datetime.timedelta(hours=7) - datetime.datetime.utcnow()
+            timeleft = datetime.datetime(2022, 5, 13) + datetime.timedelta(hours=7) - datetime.datetime.utcnow()
             embed.set_author(name="Time left until Discord's 6th Anniversary")
         embed.add_field(
             name="Countdown to midnight, May 13, California time (UTC-7):",
