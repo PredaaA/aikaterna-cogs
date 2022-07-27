@@ -46,10 +46,10 @@ class RSS(commands.Cog):
 
         self._headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:83.0) Gecko/20100101 Firefox/83.0'}
 
-    def initialize(self):
-        self._read_feeds_loop = self.bot.loop.create_task(self.read_feeds())
+    async def cog_load(self):
+        self._read_feeds_loop = asyncio.create_task(self.read_feeds())
 
-    def cog_unload(self):
+    async def cog_unload(self):
         if self._read_feeds_loop:
             self._read_feeds_loop.cancel()
 
