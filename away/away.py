@@ -1,8 +1,8 @@
 import discord
 from redbot.core import Config, commands, checks
 from typing import Optional, Literal
-import datetime
 import re
+from datetime import datetime
 
 IMAGE_LINKS = re.compile(r"(http[s]?:\/\/[^\"\']*\.(?:png|jpg|jpeg|gif|png))")
 
@@ -37,7 +37,7 @@ class Away(commands.Cog):
     def _draw_play(self, song):
         song_start_time = song.start
         total_time = song.duration
-        current_time = datetime.datetime.utcnow()
+        current_time = discord.utils.utcnow()
         elapsed_time = current_time - song_start_time
         sections = 12
         loc_time = round((elapsed_time / total_time) * sections)  # 10 sections
@@ -53,14 +53,27 @@ class Away(commands.Cog):
             else:
                 msg += bar_char
 
-        msg += " `{:.7}`/`{:.7}`".format(str(elapsed_time), str(total_time))
+        dt_elapsed_time = datetime.utcfromtimestamp(elapsed_time.total_seconds())
+        dt_total_time = datetime.utcfromtimestamp(total_time.total_seconds())
+
+        if dt_total_time.hour >= 1: #If song is an hour or over long
+            total_time = dt_total_time.strftime(f"{dt_total_time.hour}:%M:%S")
+            if dt_elapsed_time.hour == 0: #If time elapsed has not been over an hour
+                elapsed_time = dt_elapsed_time.strftime(f"{dt_elapsed_time.minute}:%S")
+            else:
+                elapsed_time = dt_elapsed_time.strftime(f"{dt_elapsed_time.hour}:%M:%S")
+        else:
+            elapsed_time = dt_elapsed_time.strftime(f"{dt_elapsed_time.minute}:%S")
+            total_time = dt_total_time.strftime(f"{dt_total_time.minute}:%S")
+
+        msg += " `{}`/`{}`".format(elapsed_time, total_time)
         return msg
 
     async def make_embed_message(self, author, message, state=None):
         """
             Makes the embed reply
         """
-        avatar = author.avatar_url_as()  # This will return default avatar if no avatar is present
+        avatar = author.display_avatar  # This will return default avatar if no avatar is present
         color = author.color
         if message:
             link = IMAGE_LINKS.search(message)
@@ -226,7 +239,7 @@ class Away(commands.Cog):
         return False
 
     @commands.Cog.listener()
-    async def on_message(self, message: discord.Message):
+    async def on_message_without_command(self, message: discord.Message):
         guild = message.guild
         if not guild or not message.mentions or message.author.bot:
             return
@@ -566,6 +579,7 @@ class Away(commands.Cog):
         await ctx.send(msg)
 
     @commands.command(name="toggleaway")
+    @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     async def _ignore(self, ctx, member: discord.Member=None):
         """
@@ -600,6 +614,7 @@ class Away(commands.Cog):
         await ctx.send(message)
 
     @commands.command()
+    @commands.guild_only()
     @checks.admin_or_permissions(administrator=True)
     async def awaytextonly(self, ctx):
         """
@@ -665,7 +680,7 @@ class Away(commands.Cog):
 
         if ctx.channel.permissions_for(ctx.me).embed_links:
             em = discord.Embed(description=msg[:2048], color=author.color)
-            em.set_author(name=f"{author.display_name}'s away settings", icon_url=author.avatar_url)
+            em.set_author(name=f"{author.display_name}'s away settings", icon_url=author.avatar.url)
             await ctx.send(embed=em)
         else:
             await ctx.send(f"{author.display_name} away settings\n" + msg)

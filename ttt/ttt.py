@@ -4,7 +4,6 @@
 import discord
 import logging
 from redbot.core import commands
-from redbot.core.utils.predicates import ReactionPredicate
 
 
 log = logging.getLogger("red.aikaterna.ttt")
@@ -18,6 +17,10 @@ class TTT(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.ttt_games = {}
+
+    async def red_delete_data_for_user(self, **kwargs):
+        """Nothing to delete"""
+        return
 
     @commands.guild_only()
     @commands.bot_has_permissions(add_reactions=True)

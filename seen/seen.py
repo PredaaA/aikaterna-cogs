@@ -76,7 +76,7 @@ class Seen(commands.Cog):
     @commands.guild_only()
     @commands.command(name="seen")
     @commands.bot_has_permissions(embed_links=True)
-    async def _seen(self, ctx, author: discord.Member):
+    async def _seen(self, ctx, *, author: discord.Member):
         """Shows last time a user was seen in chat."""
         member_seen_config = await self.config.member(author).seen()
         member_seen_cache = self._cache.get(author.guild.id, {}).get(author.id, None)
@@ -117,7 +117,7 @@ class Seen(commands.Cog):
             elif output[2] > 1:
                 ts += "{} minutes ago".format(output[2])
         em = discord.Embed(colour=discord.Color.green())
-        avatar = author.avatar_url or author.default_avatar_url
+        avatar = author.display_avatar
         em.set_author(name="{} was seen {}".format(author.display_name, ts), icon_url=avatar)
         await ctx.send(embed=em)
 

@@ -1,4 +1,6 @@
 import aiohttp
+import discord
+import contextlib
 from bs4 import BeautifulSoup
 import json
 import logging
@@ -35,7 +37,8 @@ class Dictionary(commands.Cog):
         result = await self._definition(ctx, search_term)
         str_buffer = ""
         if not result:
-            await search_msg.delete()
+            with contextlib.suppress(discord.NotFound):
+                await search_msg.delete()
             await ctx.send("This word is not in the dictionary.")
             return
         for key in result:
@@ -54,7 +57,8 @@ class Dictionary(commands.Cog):
                     else:
                         str_buffer += f"{str(counter)}. {val}\n"
                         counter += 1
-        await search_msg.delete()
+        with contextlib.suppress(discord.NotFound):
+            await search_msg.delete()
         for page in pagify(str_buffer, delims=["\n"]):
             await ctx.send(page)
 
@@ -116,30 +120,61 @@ class Dictionary(commands.Cog):
             await ctx.send("Error getting information from the website.")
             return
 
-        website_data = None
-        script = data.find_all("script")
-        for item in script:
-            if item.string:
-                if "window.INITIAL_STATE" in item.string:
-                    content = item.string
-                    content = content.lstrip("window.INITIAL_STATE =").rstrip(";")
-                    content = content.replace("undefined", '"None"').replace("true", '"True"').replace("false", '"False"')
-                    try:
-                        website_data = json.loads(content)
-                    except json.decoder.JSONDecodeError:
-                        return None
-                    except Exception as e:
-                        log.exception(e, exc_info=e)
-                        await ctx.send("Something broke. Check your console for more information.")
-                        return None
+        script = data.find("script", id="preloaded-state")
+        if script:
+            script_text = script.string
+            script_text = script_text.strip()
+            script_text = script_text.replace("window.__PRELOADED_STATE__ = ", "")
+        else:
+            await ctx.send("Error fetching script from the website.")
+            return
 
-        final = []
-        if website_data:
-            syn_list = website_data["searchData"]["tunaApiData"]["posTabs"][0][lookup_type]
-            for syn in syn_list:
-                final.append(syn["term"])
+        try:
+            data = json.loads(script_text)
+        except json.decoder.JSONDecodeError:
+            await ctx.send("Error decoding script from the website.")
+            return
+        except Exception as e:
+            log.exception(e, exc_info=e)
+            await ctx.send("Something broke. Check your console for more information.")
+            return
 
-        return final
+        try:
+            data_prefix = data["thesaurus"]["thesaurusData"]["data"]["slugs"][0]["entries"][0]["partOfSpeechGroups"][0]["shortDefinitions"][0]
+        except KeyError:
+            return None
+
+        if lookup_type == "antonyms":
+            try:
+                antonym_subsection = data_prefix["antonyms"]
+            except KeyError:
+                return None
+            antonyms = []
+            for item in antonym_subsection:
+                try:
+                    antonyms.append(item["targetWord"])
+                except KeyError:
+                    pass
+            if antonyms:
+                return antonyms
+            else:
+                return None
+
+        if lookup_type == "synonyms":
+            try:
+                synonyms_subsection = data_prefix["synonyms"]
+            except KeyError:
+                return None
+            synonyms = []
+            for item in synonyms_subsection:
+                try:
+                    synonyms.append(item["targetWord"])
+                except KeyError:
+                    pass
+            if synonyms:
+                return synonyms
+            else:
+                return None
 
     async def _get_soup_object(self, url):
         try:

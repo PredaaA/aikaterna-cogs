@@ -10,14 +10,12 @@ import heapq
 from io import BytesIO
 from typing import List, Optional, Tuple, Union
 
-import matplotlib
+from redbot.core import checks, commands, Config
 
+import matplotlib
 matplotlib.use("agg")
 import matplotlib.pyplot as plt
-
 plt.switch_backend("agg")
-
-from redbot.core import checks, commands, Config
 
 
 class Chatchart(commands.Cog):
@@ -64,7 +62,7 @@ class Chatchart(commands.Cog):
         """Calculate the top 20 from the message data package"""
         for usr in msg_data["users"]:
             pd = float(msg_data["users"][usr]["msgcount"]) / float(msg_data["total_count"])
-            msg_data["users"][usr]["percent"] = round(pd * 100, 1)
+            msg_data["users"][usr]["percent"] = pd * 100
         top_twenty = heapq.nlargest(
             20,
             [
@@ -82,10 +80,10 @@ class Chatchart(commands.Cog):
     async def create_chart(top, others, channel_or_guild: Union[discord.Guild, discord.TextChannel]):
         plt.clf()
         sizes = [x[1] for x in top]
-        labels = ["{} {:g}%".format(x[0], x[1]) for x in top]
+        labels = ["{} {:g}%".format(x[0], round(x[1], 1)) for x in top]
         if len(top) >= 20:
             sizes = sizes + [others]
-            labels = labels + ["Others {:g}%".format(others)]
+            labels = labels + ["Others {:g}%".format(round(others, 1))]
         if len(channel_or_guild.name) >= 19:
             if isinstance(channel_or_guild, discord.Guild):
                 channel_or_guild_name = "{}...".format(channel_or_guild.name[:19])
@@ -157,7 +155,7 @@ class Chatchart(commands.Cog):
                     colour=await self.bot.get_embed_colour(location=channel),
                 )
                 if channel.permissions_for(channel.guild.me).send_messages:
-                    await channel.trigger_typing()
+                    await channel.typing()
                 if animation_message_deleted is False:
                     try:
                         await animation_message.edit(embed=new_embed)

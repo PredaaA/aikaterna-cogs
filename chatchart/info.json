@@ -1,19 +1,11 @@
 {
-	"author": [
-		"aikaterna",
-        "Redjumpman"
-	],
-	"description": "Generate a pie chart from the last 5000 messages in a channel to see who's been talking the most.",
+    "author": ["aikaterna", "Redjumpman"],
+    "description": "Generate a pie chart from the last 5000 messages in a channel to see who's been talking the most.",
+    "end_user_data_statement": "This cog does not persistently store data or metadata about users.",
     "install_msg": "Thanks for installing, have fun.",
-	"short": "Generate a pie chart from the last 5000 messages",
-	"tags": [
-		"data",
-        "chart",
-        "activity"
-	],
-	"requirements": [
-		"matplotlib"
-	],
-	"type": "COG",
-	"end_user_data_statement": "This cog does not persistently store data or metadata about users."
+    "min_bot_version": "3.5.0",
+    "requirements": ["matplotlib"],
+    "short": "Generate a pie chart from the last 5000 messages",
+    "tags": ["messages", "chart", "count", "activity"],
+    "type": "COG"
 }
